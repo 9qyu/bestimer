@@ -11,19 +11,19 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@500;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#fafaf9; --fg:#1c1917; --sub:#78716c; --dim:#d6d3d1; --line:#e7e5e4; --soft:#f2f1ef; --raised:#fff;
+  --bg:#fafafa; --fg:#171717; --sub:#737373; --dim:#d4d4d4; --line:#e5e5e5; --soft:#efefef; --soft2:#e3e3e3; --raised:#fff;
   --accent:#ea580c; --accent-fg:#fff; --rest:#0d9488;
   color-scheme:light;
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
-    --bg:#0e0d0c; --fg:#f5f5f4; --sub:#8a837d; --dim:#45403b; --line:#423d38; --soft:#24211f; --raised:#3b3632;
-    --accent:#fb923c; --accent-fg:#1c1917; --rest:#2dd4bf; color-scheme:dark;
+    --bg:#0f0f0f; --fg:#f5f5f5; --sub:#8c8c8c; --dim:#454545; --line:#3d3d3d; --soft:#262626; --soft2:#333; --raised:#404040;
+    --accent:#fb923c; --accent-fg:#171717; --rest:#2dd4bf; color-scheme:dark;
   }
 }
 :root[data-theme="dark"]{
-  --bg:#0e0d0c; --fg:#f5f5f4; --sub:#8a837d; --dim:#45403b; --line:#423d38; --soft:#24211f; --raised:#3b3632;
-  --accent:#fb923c; --accent-fg:#1c1917; --rest:#2dd4bf; color-scheme:dark;
+  --bg:#0f0f0f; --fg:#f5f5f5; --sub:#8c8c8c; --dim:#454545; --line:#3d3d3d; --soft:#262626; --soft2:#333; --raised:#404040;
+  --accent:#fb923c; --accent-fg:#171717; --rest:#2dd4bf; color-scheme:dark;
 }
 *{box-sizing:border-box;margin:0}
 html,body{height:100%}
@@ -47,7 +47,7 @@ header{display:flex;justify-content:center;align-items:center;padding:16px;posit
 }
 .tabs button:hover{color:var(--fg)}
 .tabs button[aria-selected="true"]{background:var(--raised);color:var(--fg);box-shadow:0 1px 3px rgb(0 0 0/.08)}
-.tabs button i{position:absolute;top:6px;right:8px;width:5px;height:5px;border-radius:50%;background:var(--accent);display:none}
+.tabs button i{position:absolute;top:6px;right:8px;width:5px;height:5px;border-radius:50%;background:var(--fg);display:none}
 .tabs button.live i{display:block}
 .tools{position:absolute;right:16px;top:50%;transform:translateY(-50%);display:flex;gap:4px}
 .icon{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;color:var(--sub)}
@@ -57,16 +57,17 @@ header{display:flex;justify-content:center;align-items:center;padding:16px;posit
 /* main */
 main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px 16px 32px;gap:20px;min-height:0}
 .sub{min-height:28px;display:flex;align-items:center;gap:6px;color:var(--sub);font-size:15px;flex-wrap:wrap;justify-content:center}
-.chip{padding:5px 12px;border-radius:999px;font-size:13px;color:var(--sub)}
+/* pomodoro phase picker: same segmented style as the top tabs, with a bigger hit area */
+.seg{display:flex;gap:2px;background:var(--soft);padding:4px;border-radius:999px}
+.chip{padding:8px 16px;border-radius:999px;font-size:14px;font-weight:500;color:var(--sub);white-space:nowrap;transition:color .2s,background .2s}
 .chip:hover{color:var(--fg)}
-.chip.on{background:var(--soft);color:var(--fg);font-weight:500}
+.chip.on{background:var(--raised);color:var(--fg);box-shadow:0 1px 3px rgb(0 0 0/.08)}
 .disp{
   font-family:Manrope,Inter,system-ui,sans-serif;
   font-weight:700;font-variant-numeric:tabular-nums;font-feature-settings:"tnum";
-  font-size:clamp(76px,21vw,280px);line-height:1;letter-spacing:-.04em;
+  font-size:clamp(64px,16vw,220px);line-height:1;letter-spacing:-.04em;
   user-select:none;white-space:nowrap;cursor:default;text-align:center;
 }
-.disp.long{font-size:clamp(56px,15vw,220px)}
 .disp.click{touch-action:none}
 .disp [data-u]{cursor:ns-resize}
 .disp [data-u].on{color:var(--accent)}
@@ -82,11 +83,12 @@ main{flex:1;display:flex;flex-direction:column;align-items:center;justify-conten
 .bar.show{visibility:visible}
 
 .ctrls{display:flex;gap:12px;align-items:center;justify-content:center;min-height:64px;flex-wrap:wrap}
-.btn{height:52px;min-width:52px;padding:0 22px;border-radius:999px;font-size:15px;font-weight:500;color:var(--sub);transition:transform .1s,background .2s,color .2s}
-.btn:not(.main){border:1px solid var(--line)}
-.btn:hover{color:var(--fg);background:var(--soft)}
+/* every control button shares one size; secondary ones are a flat gray fill, no outline */
+.btn{height:64px;min-width:136px;padding:0 24px;border-radius:999px;font-size:17px;font-weight:600;
+  background:var(--soft);color:var(--fg);transition:transform .1s,background .2s,color .2s}
+.btn:hover{background:var(--soft2)}
 .btn:active{transform:scale(.96)}
-.btn.main{height:64px;min-width:136px;font-size:17px;font-weight:600;background:var(--accent);color:var(--accent-fg)}
+.btn.main{background:var(--accent);color:var(--accent-fg)}
 .btn.main:hover{filter:brightness(1.06);background:var(--accent);color:var(--accent-fg)}
 .btn.main.pause{background:var(--fg);color:var(--bg)}
 
@@ -115,9 +117,9 @@ main{flex:1;display:flex;flex-direction:column;align-items:center;justify-conten
 @media (max-width:520px){
   header{flex-direction:column;gap:8px;padding:12px 16px}
   .tools{position:static;transform:none}
-  .tabs button{padding:8px 11px;font-size:13px}
+  .tabs button,.chip{padding:8px 11px;font-size:13px}
   .tabs button i{right:4px}
-  .btn{padding:0 18px}
+  .btn{min-width:100px;padding:0 16px}
 }
 @media (max-height:520px) and (orientation:landscape){
   main{gap:10px;padding-top:4px}
@@ -394,11 +396,14 @@ function ui() {
 
   else if (S.mode === 'pomodoro') {
     const P = S.pomo, run = CD.run(P);
+    const seg = el('<div class="seg" role="tablist" aria-label="フェーズ"></div>');
+    sub.append(seg);
     for (const k of ['work', 'short', 'long']) {
       const c = document.createElement('button');
       c.className = 'chip' + (P.phase === k ? ' on' : ''); c.textContent = PHASE[k];
+      c.setAttribute('role', 'tab'); c.setAttribute('aria-selected', P.phase === k);
       c.onclick = act(() => { pomoPhase(k); });
-      sub.append(c);
+      seg.append(c);
     }
     const started = run || CD.left(P) < P.dur;
     if (started) ctrls.append(btn('リセット', reset, '', 'R'));
@@ -467,12 +472,11 @@ function tick(force) {
       }
       long = true;
     } else {
-      const f = hms(CD.left(S.timer), true);
-      html = f.text; long = f.h > 0;
-      if (!CD.run(S.timer) && !ringing) {
-        const t = Math.ceil(CD.left(S.timer) / 1000), h = Math.floor(t / 3600);
-        segs = h ? [String(h), pad(Math.floor(t % 3600 / 60)), pad(t % 60)] : [pad(Math.floor(t / 60)), pad(t % 60)];
-      }
+      // timer always shows h:mm:ss so the hour can be scrolled from the start
+      const t = Math.ceil(CD.left(S.timer) / 1000);
+      const parts = [String(Math.floor(t / 3600)), pad(Math.floor(t % 3600 / 60)), pad(t % 60)];
+      html = parts.join(':'); long = true;
+      if (!CD.run(S.timer) && !ringing) segs = parts;
       prog =S.timer.total ? CD.left(S.timer) / S.timer.total : 0;
     }
   } else if (m === 'stopwatch') {
@@ -492,7 +496,7 @@ function tick(force) {
   }
   if (segs) renderSegs(segs);
   else if (html !== lastHTML || force) { disp.innerHTML = html; lastHTML = html; }
-  disp.classList.toggle('long', long);
+  // one display size for every mode (timer h:mm:ss sets the width budget)
   bar.classList.toggle('show', prog != null && edit == null);
   if (prog != null) barIn.style.width = (Math.max(0, Math.min(1, prog)) * 100).toFixed(2) + '%';
 
