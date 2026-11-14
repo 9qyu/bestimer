@@ -1,0 +1,7 @@
+{
+  "name": "bestimer",
+  "private": true,
+  "scripts": {
+    "deploy": "npx -y wrangler@4 pages deploy . --project-name bestimer --branch main"
+  }
+}
