@@ -11,18 +11,18 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@500;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#fafaf9; --fg:#1c1917; --sub:#78716c; --dim:#d6d3d1; --line:#e7e5e4; --soft:#f2f1ef;
+  --bg:#fafaf9; --fg:#1c1917; --sub:#78716c; --dim:#d6d3d1; --line:#e7e5e4; --soft:#f2f1ef; --raised:#fff;
   --accent:#ea580c; --accent-fg:#fff; --rest:#0d9488;
   color-scheme:light;
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
-    --bg:#0e0d0c; --fg:#f5f5f4; --sub:#8a837d; --dim:#3a3633; --line:#26231f; --soft:#1a1816;
+    --bg:#0e0d0c; --fg:#f5f5f4; --sub:#8a837d; --dim:#45403b; --line:#423d38; --soft:#24211f; --raised:#3b3632;
     --accent:#fb923c; --accent-fg:#1c1917; --rest:#2dd4bf; color-scheme:dark;
   }
 }
 :root[data-theme="dark"]{
-  --bg:#0e0d0c; --fg:#f5f5f4; --sub:#8a837d; --dim:#3a3633; --line:#26231f; --soft:#1a1816;
+  --bg:#0e0d0c; --fg:#f5f5f4; --sub:#8a837d; --dim:#45403b; --line:#423d38; --soft:#24211f; --raised:#3b3632;
   --accent:#fb923c; --accent-fg:#1c1917; --rest:#2dd4bf; color-scheme:dark;
 }
 *{box-sizing:border-box;margin:0}
@@ -46,7 +46,7 @@ header{display:flex;justify-content:center;align-items:center;padding:16px;posit
   transition:color .2s,background .2s;white-space:nowrap;
 }
 .tabs button:hover{color:var(--fg)}
-.tabs button[aria-selected="true"]{background:var(--bg);color:var(--fg);box-shadow:0 1px 3px rgb(0 0 0/.08)}
+.tabs button[aria-selected="true"]{background:var(--raised);color:var(--fg);box-shadow:0 1px 3px rgb(0 0 0/.08)}
 .tabs button i{position:absolute;top:6px;right:8px;width:5px;height:5px;border-radius:50%;background:var(--accent);display:none}
 .tabs button.live i{display:block}
 .tools{position:absolute;right:16px;top:50%;transform:translateY(-50%);display:flex;gap:4px}
@@ -68,8 +68,8 @@ main{flex:1;display:flex;flex-direction:column;align-items:center;justify-conten
 }
 .disp.long{font-size:clamp(56px,15vw,220px)}
 .disp.click{touch-action:none}
-.disp [data-u]{cursor:ns-resize;border-radius:.08em;transition:color .15s}
-.disp [data-u]:hover,.disp [data-u].on{color:var(--accent)}
+.disp [data-u]{cursor:ns-resize}
+.disp [data-u].on{color:var(--accent)}
 .disp small{font-size:.38em;letter-spacing:0;color:var(--sub);font-weight:500}
 .disp .dim{color:var(--dim)}
 .disp u{text-decoration:none;font-size:.28em;color:var(--sub);font-weight:500;margin:0 .25em 0 .06em;letter-spacing:0}
@@ -83,6 +83,7 @@ main{flex:1;display:flex;flex-direction:column;align-items:center;justify-conten
 
 .ctrls{display:flex;gap:12px;align-items:center;justify-content:center;min-height:64px;flex-wrap:wrap}
 .btn{height:52px;min-width:52px;padding:0 22px;border-radius:999px;font-size:15px;font-weight:500;color:var(--sub);transition:transform .1s,background .2s,color .2s}
+.btn:not(.main){border:1px solid var(--line)}
 .btn:hover{color:var(--fg);background:var(--soft)}
 .btn:active{transform:scale(.96)}
 .btn.main{height:64px;min-width:136px;font-size:17px;font-weight:600;background:var(--accent);color:var(--accent-fg)}
@@ -454,7 +455,7 @@ function tick(force) {
     return ring('pomodoro', was === 'work' ? 'おつかれさま。休憩しましょう' : '休憩おわり。集中しましょう');
   }
 
-  let html = '', long = false, prog = null, title = 'Bestimer';
+  let html = '', long = false, prog = null, title = 'Bestimer', segs = null;
   const m = S.mode;
   if (m === 'timer') {
     if (edit != null && !ringing) {
@@ -469,9 +470,8 @@ function tick(force) {
       const f = hms(CD.left(S.timer), true);
       html = f.text; long = f.h > 0;
       if (!CD.run(S.timer) && !ringing) {
-        const t = Math.ceil(CD.left(S.timer) / 1000), h = Math.floor(t / 3600), mm = Math.floor(t % 3600 / 60), ss = t % 60;
-        const seg = (u, v) => `<span data-u="${u}"${dragU === u ? ' class="on"' : ''}>${v}</span>`;
-        html = (h ? seg(3600, h) + ':' : '') + seg(60, pad(mm)) + ':' + seg(1, pad(ss));
+        const t = Math.ceil(CD.left(S.timer) / 1000), h = Math.floor(t / 3600);
+        segs = h ? [String(h), pad(Math.floor(t % 3600 / 60)), pad(t % 60)] : [pad(Math.floor(t / 60)), pad(t % 60)];
       }
       prog =S.timer.total ? CD.left(S.timer) / S.timer.total : 0;
     }
@@ -490,7 +490,8 @@ function tick(force) {
     const s = (ampm ? ampm + '　' : '') + d.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
     if (s !== lastSub || force) { sub.textContent = s; lastSub = s; }
   }
-  if (html !== lastHTML || force) { disp.innerHTML = html; lastHTML = html; }
+  if (segs) renderSegs(segs);
+  else if (html !== lastHTML || force) { disp.innerHTML = html; lastHTML = html; }
   disp.classList.toggle('long', long);
   bar.classList.toggle('show', prog != null && edit == null);
   if (prog != null) barIn.style.width = (Math.max(0, Math.min(1, prog)) * 100).toFixed(2) + '%';
@@ -504,6 +505,24 @@ function tick(force) {
   if (title !== lastTitle) { document.title = title; lastTitle = title; }
 }
 
+// Adjustable timer digits: keep the same span elements and only swap their text,
+// so scrolling never rebuilds the DOM (which caused hover/colour flicker).
+let hoverU = null;
+function renderSegs(vals) {
+  const units = vals.length === 3 ? [3600, 60, 1] : [60, 1];
+  let spans = disp.querySelectorAll('[data-u]');
+  if (spans.length !== units.length || lastHTML !== '#segs') {
+    disp.innerHTML = units.map(u => `<span data-u="${u}"></span>`).join(':');
+    spans = disp.querySelectorAll('[data-u]');
+    lastHTML = '#segs';
+  }
+  const on = dragU ?? hoverU;
+  spans.forEach((s, i) => {
+    if (s.textContent !== vals[i]) s.textContent = vals[i];
+    s.classList.toggle('on', units[i] === on);
+  });
+}
+
 /* ---------- events ---------- */
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => setMode(b.dataset.mode));
 /* scroll / drag on a digit group to adjust the timer */
@@ -513,9 +532,16 @@ const unitAt = t => +(t.closest?.('[data-u]')?.dataset.u || 60);
 function bump(u, dir) {
   const cur = Math.ceil(CD.left(S.timer) / 1000);
   const next = Math.max(0, Math.min(MAXS, cur + dir * u));
+  const wasPaused = CD.left(S.timer) !== S.timer.dur;
   CD.set(S.timer, next * 1000);
-  save(); ui();
+  save();
+  if (wasPaused) ui(); else tick(false);   // buttons only change when leaving the paused state
 }
+disp.addEventListener('pointermove', e => {
+  const u = e.target.closest?.('[data-u]') ? unitAt(e.target) : null;
+  if (u !== hoverU) { hoverU = u; if (canAdjust()) tick(false); }
+});
+disp.addEventListener('pointerleave', () => { hoverU = null; if (canAdjust()) tick(false); });
 let wheelAcc = 0;
 disp.addEventListener('wheel', e => {
   if (!canAdjust()) return;
