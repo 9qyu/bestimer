@@ -1,0 +1,618 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Bestimer</title>
+<meta name="description" content="ミニマルで直感的なタイマー・ストップウォッチ・ポモドーロ・時計">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='17' r='12' fill='none' stroke='%23ea580c' stroke-width='3'/%3E%3Cpath d='M16 10v7l4 3' stroke='%23ea580c' stroke-width='3' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#fafaf9; --fg:#1c1917; --sub:#78716c; --dim:#d6d3d1; --line:#e7e5e4; --soft:#f2f1ef;
+  --accent:#ea580c; --accent-fg:#fff; --rest:#0d9488;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0e0d0c; --fg:#f5f5f4; --sub:#8a837d; --dim:#3a3633; --line:#26231f; --soft:#1a1816;
+    --accent:#fb923c; --accent-fg:#1c1917; --rest:#2dd4bf; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0e0d0c; --fg:#f5f5f4; --sub:#8a837d; --dim:#3a3633; --line:#26231f; --soft:#1a1816;
+  --accent:#fb923c; --accent-fg:#1c1917; --rest:#2dd4bf; color-scheme:dark;
+}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{
+  background:var(--bg); color:var(--fg);
+  font-family:Inter,system-ui,-apple-system,"Hiragino Sans","Yu Gothic UI","Segoe UI",sans-serif;
+  -webkit-font-smoothing:antialiased; -webkit-tap-highlight-color:transparent;
+  display:flex; flex-direction:column; min-height:100dvh; overflow-x:hidden;
+  transition:background .3s;
+}
+body.rest{--accent:var(--rest)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* header */
+header{display:flex;justify-content:center;align-items:center;padding:16px;position:relative}
+.tabs{display:flex;gap:2px;background:var(--soft);padding:4px;border-radius:999px}
+.tabs button{
+  position:relative;padding:8px 16px;border-radius:999px;font-size:14px;font-weight:500;color:var(--sub);
+  transition:color .2s,background .2s;white-space:nowrap;
+}
+.tabs button:hover{color:var(--fg)}
+.tabs button[aria-selected="true"]{background:var(--bg);color:var(--fg);box-shadow:0 1px 3px rgb(0 0 0/.08)}
+.tabs button i{position:absolute;top:6px;right:8px;width:5px;height:5px;border-radius:50%;background:var(--accent);display:none}
+.tabs button.live i{display:block}
+.tools{position:absolute;right:16px;top:50%;transform:translateY(-50%);display:flex;gap:4px}
+.icon{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;color:var(--sub)}
+.icon:hover{color:var(--fg);background:var(--soft)}
+.icon svg{width:18px;height:18px}
+
+/* main */
+main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px 16px 32px;gap:20px;min-height:0}
+.sub{min-height:28px;display:flex;align-items:center;gap:6px;color:var(--sub);font-size:15px;flex-wrap:wrap;justify-content:center}
+.chip{padding:5px 12px;border-radius:999px;font-size:13px;color:var(--sub)}
+.chip:hover{color:var(--fg)}
+.chip.on{background:var(--soft);color:var(--fg);font-weight:500}
+.disp{
+  font-family:Manrope,Inter,system-ui,sans-serif;
+  font-weight:700;font-variant-numeric:tabular-nums;font-feature-settings:"tnum";
+  font-size:clamp(76px,21vw,280px);line-height:1;letter-spacing:-.04em;
+  user-select:none;white-space:nowrap;cursor:default;text-align:center;
+}
+.disp.long{font-size:clamp(56px,15vw,220px)}
+.disp.click{touch-action:none}
+.disp [data-u]{cursor:ns-resize;border-radius:.08em;transition:color .15s}
+.disp [data-u]:hover,.disp [data-u].on{color:var(--accent)}
+.disp small{font-size:.38em;letter-spacing:0;color:var(--sub);font-weight:500}
+.disp .dim{color:var(--dim)}
+.disp u{text-decoration:none;font-size:.28em;color:var(--sub);font-weight:500;margin:0 .25em 0 .06em;letter-spacing:0}
+.disp .caret{display:inline-block;width:.04em;height:.8em;background:var(--accent);vertical-align:-.04em;animation:blink 1s steps(1) infinite;margin-left:.04em}
+@keyframes blink{50%{opacity:0}}
+.ringing .disp{color:var(--accent);animation:pulse 1s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.35}}
+.bar{width:min(560px,80vw);height:3px;background:var(--line);border-radius:3px;overflow:hidden;visibility:hidden}
+.bar span{display:block;height:100%;background:var(--accent);border-radius:3px;width:0}
+.bar.show{visibility:visible}
+
+.ctrls{display:flex;gap:12px;align-items:center;justify-content:center;min-height:64px;flex-wrap:wrap}
+.btn{height:52px;min-width:52px;padding:0 22px;border-radius:999px;font-size:15px;font-weight:500;color:var(--sub);transition:transform .1s,background .2s,color .2s}
+.btn:hover{color:var(--fg);background:var(--soft)}
+.btn:active{transform:scale(.96)}
+.btn.main{height:64px;min-width:136px;font-size:17px;font-weight:600;background:var(--accent);color:var(--accent-fg)}
+.btn.main:hover{filter:brightness(1.06);background:var(--accent);color:var(--accent-fg)}
+.btn.main.pause{background:var(--fg);color:var(--bg)}
+
+.extra{min-height:48px;display:flex;flex-direction:column;align-items:center;gap:14px;width:100%}
+.hint{font-size:13px;color:var(--sub)}
+
+.laps{width:min(420px,100%);max-height:30vh;overflow:auto;font-variant-numeric:tabular-nums;font-size:15px}
+.laps div{display:grid;grid-template-columns:3em 1fr 1fr;padding:9px 4px;border-top:1px solid var(--line)}
+.laps div span:nth-child(1){color:var(--sub)}
+.laps div span:nth-child(3){text-align:right;color:var(--sub)}
+.laps .best{color:var(--rest)} .laps .worst{color:var(--accent)}
+
+.dots{display:flex;gap:8px;align-items:center}
+.dots i{width:8px;height:8px;border-radius:50%;background:var(--line)}
+.dots i.f{background:var(--accent)}
+.dots b{font-weight:400;font-size:13px;color:var(--sub);margin-left:6px}
+.cfg{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;font-size:13px;color:var(--sub);align-items:center}
+.cfg label{display:flex;align-items:center;gap:6px}
+.cfg input[type=number]{width:56px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg);font:inherit;font-size:14px;text-align:center}
+.cfg input[type=checkbox]{accent-color:var(--accent);width:16px;height:16px}
+.link{font-size:13px;color:var(--sub);padding:4px 8px;border-radius:6px}
+.link:hover{color:var(--fg)}
+
+#kb{position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none;font-size:16px;border:0;padding:0}
+
+@media (max-width:520px){
+  header{flex-direction:column;gap:8px;padding:12px 16px}
+  .tools{position:static;transform:none}
+  .tabs button{padding:8px 11px;font-size:13px}
+  .tabs button i{right:4px}
+  .btn{padding:0 18px}
+}
+@media (max-height:520px) and (orientation:landscape){
+  main{gap:10px;padding-top:4px}
+  .disp{font-size:clamp(60px,26vh,200px)}
+  .extra{display:none}
+}
+</style>
+</head>
+<body>
+<header>
+  <nav class="tabs" role="tablist" aria-label="モード">
+    <button role="tab" data-mode="timer">タイマー<i></i></button>
+    <button role="tab" data-mode="stopwatch">ストップウォッチ<i></i></button>
+    <button role="tab" data-mode="pomodoro">ポモドーロ<i></i></button>
+    <button role="tab" data-mode="clock">時計</button>
+  </nav>
+  <div class="tools">
+    <button class="icon" id="theme" title="テーマ切替" aria-label="テーマ切替"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></svg></button>
+    <button class="icon" id="fs" title="全画面 (F)" aria-label="全画面"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+  </div>
+</header>
+
+<main>
+  <div class="sub" id="sub"></div>
+  <div class="disp" id="disp" aria-live="off"></div>
+  <div class="bar" id="bar"><span></span></div>
+  <div class="ctrls" id="ctrls"></div>
+  <div class="extra" id="extra"></div>
+</main>
+<input id="kb" inputmode="numeric" pattern="[0-9]*" autocomplete="off" aria-label="時間を入力">
+
+
+<script>
+(() => {
+const $ = s => document.querySelector(s);
+const now = () => Date.now();
+const pad = n => String(n).padStart(2, '0');
+const MIN = 60000;
+const MODES = ['timer', 'stopwatch', 'pomodoro', 'clock'];
+const PHASE = { work: '集中', short: '休憩', long: '長い休憩' };
+
+/* ---------- state ---------- */
+const KEY = 'bestimer.v1';
+const DEF = {
+  mode: 'timer',
+  timer: { dur: 5 * MIN, rem: 5 * MIN, total: 5 * MIN, end: null },
+  sw: { start: null, acc: 0, laps: [] },
+  pomo: { phase: 'work', done: 0, dur: 25 * MIN, rem: 25 * MIN, total: 25 * MIN, end: null,
+          cfg: { work: 25, short: 5, long: 15, every: 4, auto: false } },
+  clock: { h24: true },
+  theme: null,
+};
+let S = structuredClone(DEF);
+try {
+  const saved = JSON.parse(localStorage.getItem(KEY));
+  if (saved) for (const k in DEF) if (saved[k] != null)
+    S[k] = typeof DEF[k] === 'object' && DEF[k] ? { ...DEF[k], ...saved[k] } : saved[k];
+  S.pomo.cfg = { ...DEF.pomo.cfg, ...S.pomo.cfg };
+} catch {}
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch {} };
+
+let edit = null;          // timer digit buffer while typing
+let ringing = null;       // {src, msg}
+let showCfg = false;
+
+/* ---------- countdown helpers ---------- */
+const CD = {
+  run: o => o.end != null,
+  left: o => o.end != null ? Math.max(0, o.end - now()) : o.rem,
+  start(o) {
+    if (o.end != null) return;
+    if (o.rem <= 0) { o.rem = o.dur; o.total = o.dur; }
+    if (o.rem <= 0) return;
+    o.end = now() + o.rem;
+  },
+  pause(o) { if (o.end == null) return; o.rem = CD.left(o); o.end = null; },
+  reset(o) { o.end = null; o.rem = o.dur; o.total = o.dur; },
+  add(o, ms) {
+    const l = CD.left(o);
+    if (l + ms <= 0) ms = -l + 1000;
+    if (o.end != null) o.end += ms; else o.rem += ms;
+    o.total = Math.max(o.total + ms, CD.left(o));
+  },
+  set(o, ms) { o.dur = ms; CD.reset(o); },
+};
+const swEl = () => S.sw.acc + (S.sw.start != null ? now() - S.sw.start : 0);
+const swRun = () => S.sw.start != null;
+
+/* ---------- format ---------- */
+function hms(ms, ceil) {
+  const t = ceil ? Math.ceil(ms / 1000) : Math.floor(ms / 1000);
+  const h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s = t % 60;
+  return { h, text: h ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}` };
+}
+const plain = ms => hms(ms, false).text + '.' + pad(Math.floor(ms % 1000 / 10));
+
+/* ---------- sound / notify / wake ---------- */
+let ac, ringIv, ringTo;
+function audio() {
+  try { ac ??= new (window.AudioContext || window.webkitAudioContext)(); if (ac.state === 'suspended') ac.resume(); } catch {}
+  return ac;
+}
+function chime() {
+  const a = audio(); if (!a) return;
+  const t = a.currentTime;
+  [0, .16, .32].forEach((x, i) => {
+    const o = a.createOscillator(), g = a.createGain();
+    o.type = 'sine'; o.frequency.value = i === 2 ? 1319 : 988;
+    g.gain.setValueAtTime(0, t + x);
+    g.gain.linearRampToValueAtTime(.28, t + x + .01);
+    g.gain.exponentialRampToValueAtTime(.001, t + x + .25);
+    o.connect(g).connect(a.destination); o.start(t + x); o.stop(t + x + .3);
+  });
+}
+function askNotify() {
+  audio();
+  if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission().catch(() => {});
+}
+function ring(src, msg) {
+  ringing = { src, msg };
+  S.mode = src; edit = null;
+  document.body.classList.add('ringing');
+  chime(); clearInterval(ringIv); clearTimeout(ringTo);
+  ringIv = setInterval(chime, 1400);
+  ringTo = setTimeout(() => clearInterval(ringIv), 60000);
+  if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 300]);
+  if ('Notification' in window && Notification.permission === 'granted' && document.hidden) {
+    try { new Notification('Bestimer', { body: msg, tag: 'bestimer' }); } catch {}
+  }
+  save(); ui();
+}
+function dismiss() {
+  if (!ringing) return;
+  clearInterval(ringIv); clearTimeout(ringTo);
+  if (ringing.src === 'timer') CD.reset(S.timer);
+  ringing = null;
+  document.body.classList.remove('ringing');
+  save(); ui();
+}
+let wl = null;
+async function wake() {
+  const need = !document.hidden && (CD.run(S.timer) || swRun() || CD.run(S.pomo) || S.mode === 'clock');
+  try {
+    if (need && !wl && navigator.wakeLock) { wl = await navigator.wakeLock.request('screen'); wl.addEventListener('release', () => wl = null); }
+    else if (!need && wl) { wl.release(); wl = null; }
+  } catch {}
+}
+
+/* ---------- actions ---------- */
+const act = fn => (...a) => { fn(...a); save(); ui(); };
+
+const timerStart = act(() => {
+  if (edit != null) return commit();
+  if (CD.left(S.timer) <= 0 && S.timer.dur <= 0) return startEdit();
+  askNotify(); CD.start(S.timer);
+});
+const timerToggle = () => CD.run(S.timer) ? act(() => CD.pause(S.timer))() : timerStart();
+
+function startEdit() {
+  if (CD.run(S.timer) || ringing) return;
+  edit = ''; kb.value = ''; kb.focus({ preventScroll: true }); ui();
+}
+function commit() {
+  const d = (edit || '').padStart(6, '0');
+  const ms = (+d.slice(0, 2) * 3600 + +d.slice(2, 4) * 60 + +d.slice(4)) * 1000;
+  edit = null; kb.blur();
+  if (ms > 0) { askNotify(); CD.set(S.timer, ms); CD.start(S.timer); }
+  save(); ui();
+}
+function cancelEdit() { edit = null; kb.blur(); ui(); }
+function typeDigit(k) {
+  if (edit == null) { edit = ''; }
+  if (edit === '' && k === '0') return ui();
+  if (edit.length < 6) edit += k;
+  kb.value = edit; ui();
+}
+
+const swToggle = act(() => {
+  if (swRun()) { S.sw.acc = swEl(); S.sw.start = null; }
+  else S.sw.start = now();
+});
+const swLap = act(() => { if (swRun()) S.sw.laps.push(swEl()); });
+const swReset = act(() => { S.sw = { start: null, acc: 0, laps: [] }; });
+
+function pomoPhase(p) {
+  S.pomo.phase = p;
+  CD.set(S.pomo, S.pomo.cfg[p] * MIN);
+}
+function pomoNext() {
+  const P = S.pomo;
+  if (P.phase === 'work') { P.done++; pomoPhase(P.done % P.cfg.every === 0 ? 'long' : 'short'); }
+  else pomoPhase('work');
+}
+const pomoToggle = act(() => { if (CD.run(S.pomo)) CD.pause(S.pomo); else { askNotify(); CD.start(S.pomo); } });
+const pomoSkip = act(() => { const auto = CD.run(S.pomo); pomoNext(); if (auto) CD.start(S.pomo); });
+
+function primary() {
+  if (S.mode === 'timer') timerToggle();
+  else if (S.mode === 'stopwatch') swToggle();
+  else if (S.mode === 'pomodoro') pomoToggle();
+  else if (S.mode === 'clock') act(() => S.clock.h24 = !S.clock.h24)();
+}
+const reset = act(() => {
+  if (S.mode === 'timer') {
+    edit = null;
+    // running/paused → back to the set time; already idle → clear to 00:00
+    if (CD.run(S.timer) || CD.left(S.timer) !== S.timer.dur) CD.reset(S.timer); else CD.set(S.timer, 0);
+  }
+  else if (S.mode === 'stopwatch') S.sw = { start: null, acc: 0, laps: [] };
+  else if (S.mode === 'pomodoro') CD.reset(S.pomo);
+});
+const setMode = act(m => { if (m !== 'timer') { edit = null; kb.blur(); } S.mode = m; showCfg = false; });
+
+/* ---------- render ---------- */
+const disp = $('#disp'), sub = $('#sub'), bar = $('#bar'), barIn = bar.firstElementChild,
+      ctrls = $('#ctrls'), extra = $('#extra'), kb = $('#kb');
+
+function btn(label, fn, cls = '', title = '') {
+  const b = document.createElement('button');
+  b.className = 'btn ' + cls; b.textContent = label; if (title) b.title = title;
+  b.addEventListener('click', e => { e.preventDefault(); fn(); });
+  return b;
+}
+function el(html) { const d = document.createElement('div'); d.innerHTML = html; return d.firstElementChild; }
+
+function ui() {
+  document.querySelectorAll('.tabs button').forEach(b => {
+    const m = b.dataset.mode;
+    b.setAttribute('aria-selected', m === S.mode);
+    const live = (m === 'timer' && CD.run(S.timer)) || (m === 'stopwatch' && swRun()) || (m === 'pomodoro' && CD.run(S.pomo));
+    b.classList.toggle('live', live && m !== S.mode);
+  });
+  document.body.classList.toggle('rest', S.mode === 'pomodoro' && S.pomo.phase !== 'work');
+  ctrls.replaceChildren(); extra.replaceChildren(); sub.replaceChildren();
+  disp.classList.toggle('click', S.mode === 'timer' && !CD.run(S.timer));
+  disp.title = S.mode === 'timer' && !CD.run(S.timer) ? 'クリックして時間を入力' : S.mode === 'clock' ? 'クリックで12/24時間切替' : '';
+
+  if (ringing) {
+    sub.textContent = ringing.msg;
+    ctrls.append(btn('停止', dismiss, 'main'));
+    return tick(true);
+  }
+
+  if (S.mode === 'timer') {
+    const T = S.timer, run = CD.run(T), left = CD.left(T);
+    if (edit != null) {
+      sub.textContent = '数字で時間を入力';
+      ctrls.append(btn('キャンセル', cancelEdit), btn('開始', commit, 'main'));
+      extra.append(el('<div class="hint">例: 130 → 1分30秒 ／ 10000 → 1時間</div>'));
+    } else {
+      const paused = !run && left > 0 && left < T.dur;
+      ctrls.append(btn('リセット', reset, '', 'R'));
+      ctrls.append(btn(run ? '一時停止' : paused ? '再開' : '開始', timerToggle, 'main' + (run ? ' pause' : ''), 'Space'));
+    }
+  }
+
+  else if (S.mode === 'stopwatch') {
+    const run = swRun(), el_ = swEl();
+    if (run) ctrls.append(btn('ラップ', swLap, '', 'L'), btn('停止', swToggle, 'main pause', 'Space'));
+    else if (el_ > 0) ctrls.append(btn('リセット', swReset, '', 'R'), btn('再開', swToggle, 'main', 'Space'));
+    else ctrls.append(btn('開始', swToggle, 'main', 'Space'));
+    const L = S.sw.laps;
+    if (L.length) {
+      const splits = L.map((t, i) => t - (L[i - 1] || 0));
+      const mx = Math.max(...splits), mn = Math.min(...splits);
+      const box = el('<div class="laps"></div>');
+      for (let i = L.length - 1; i >= 0; i--) {
+        const c = L.length >= 3 ? (splits[i] === mn ? 'best' : splits[i] === mx ? 'worst' : '') : '';
+        box.append(el(`<div class="${c}"><span>${i + 1}</span><span>${plain(splits[i])}</span><span>${plain(L[i])}</span></div>`));
+      }
+      extra.append(box);
+    }
+  }
+
+  else if (S.mode === 'pomodoro') {
+    const P = S.pomo, run = CD.run(P);
+    for (const k of ['work', 'short', 'long']) {
+      const c = document.createElement('button');
+      c.className = 'chip' + (P.phase === k ? ' on' : ''); c.textContent = PHASE[k];
+      c.onclick = act(() => { pomoPhase(k); });
+      sub.append(c);
+    }
+    const started = run || CD.left(P) < P.dur;
+    if (started) ctrls.append(btn('リセット', reset, '', 'R'));
+    ctrls.append(btn(run ? '一時停止' : started ? '再開' : '開始', pomoToggle, 'main' + (run ? ' pause' : ''), 'Space'));
+    ctrls.append(btn('スキップ', pomoSkip, '', '次のフェーズへ'));
+    const n = P.phase === 'long' && P.done > 0 ? P.cfg.every : P.done % P.cfg.every;
+    const dots = el('<div class="dots"></div>');
+    for (let i = 0; i < P.cfg.every; i++) dots.append(el(`<i class="${i < n ? 'f' : ''}"></i>`));
+    dots.append(el(`<b>完了 ${P.done}</b>`));
+    const row = el('<div style="display:flex;gap:12px;align-items:center"></div>');
+    row.append(dots, Object.assign(el('<button class="link">設定</button>'), { onclick: () => { showCfg = !showCfg; ui(); } }));
+    extra.append(row);
+    if (showCfg) {
+      const f = el(`<div class="cfg">
+        <label>集中 <input type="number" min="1" max="180" data-k="work">分</label>
+        <label>休憩 <input type="number" min="1" max="60" data-k="short">分</label>
+        <label>長い休憩 <input type="number" min="1" max="120" data-k="long">分</label>
+        <label>長い休憩まで <input type="number" min="1" max="12" data-k="every">回</label>
+        <label><input type="checkbox" data-k="auto"> 自動で次へ</label></div>`);
+      f.querySelectorAll('input').forEach(i => {
+        const k = i.dataset.k;
+        if (i.type === 'checkbox') i.checked = P.cfg.auto; else i.value = P.cfg[k];
+        i.onchange = () => {
+          if (i.type === 'checkbox') P.cfg.auto = i.checked;
+          else { const v = Math.round(+i.value); if (v >= 1) P.cfg[k] = v; else i.value = P.cfg[k]; }
+          if (!CD.run(P) && CD.left(P) === P.dur) pomoPhase(P.phase);
+          save(); tick(true);
+        };
+      });
+      extra.append(f);
+    }
+  }
+
+  else if (S.mode === 'clock') {
+    const b = el(`<button class="link">${S.clock.h24 ? '12時間表示にする' : '24時間表示にする'}</button>`);
+    b.onclick = act(() => S.clock.h24 = !S.clock.h24);
+    extra.append(b);
+  }
+  wake();
+  tick(true);
+}
+
+let lastHTML = '', lastTitle = '', lastSub = '';
+function tick(force) {
+  // completion checks (run regardless of the visible mode)
+  if (CD.run(S.timer) && CD.left(S.timer) <= 0) {
+    S.timer.end = null; S.timer.rem = 0;
+    return ring('timer', '時間です');
+  }
+  if (CD.run(S.pomo) && CD.left(S.pomo) <= 0) {
+    const was = S.pomo.phase;
+    pomoNext();
+    if (S.pomo.cfg.auto) CD.start(S.pomo);
+    return ring('pomodoro', was === 'work' ? 'おつかれさま。休憩しましょう' : '休憩おわり。集中しましょう');
+  }
+
+  let html = '', long = false, prog = null, title = 'Bestimer';
+  const m = S.mode;
+  if (m === 'timer') {
+    if (edit != null && !ringing) {
+      const d = edit.padStart(6, '0'), n = edit.length;
+      for (let i = 0; i < 6; i++) {
+        html += `<span class="${i >= 6 - n ? '' : 'dim'}">${d[i]}</span>`;
+        if (i % 2) html += `<u>${'hms'[i >> 1]}</u>`;
+        if (i === 5) html += '<span class="caret"></span>';
+      }
+      long = true;
+    } else {
+      const f = hms(CD.left(S.timer), true);
+      html = f.text; long = f.h > 0;
+      if (!CD.run(S.timer) && !ringing) {
+        const t = Math.ceil(CD.left(S.timer) / 1000), h = Math.floor(t / 3600), mm = Math.floor(t % 3600 / 60), ss = t % 60;
+        const seg = (u, v) => `<span data-u="${u}"${dragU === u ? ' class="on"' : ''}>${v}</span>`;
+        html = (h ? seg(3600, h) + ':' : '') + seg(60, pad(mm)) + ':' + seg(1, pad(ss));
+      }
+      prog =S.timer.total ? CD.left(S.timer) / S.timer.total : 0;
+    }
+  } else if (m === 'stopwatch') {
+    const t = swEl(), f = hms(t, false);
+    html = `${f.text}<small>.${pad(Math.floor(t % 1000 / 10))}</small>`; long = f.h > 0;
+  } else if (m === 'pomodoro') {
+    const f = hms(CD.left(S.pomo), true);
+    html = f.text; long = f.h > 0;
+    prog = S.pomo.total ? CD.left(S.pomo) / S.pomo.total : 0;
+  } else {
+    const d = new Date();
+    let h = d.getHours(), ampm = '';
+    if (!S.clock.h24) { ampm = h < 12 ? '午前' : '午後'; h = h % 12 || 12; }
+    html = `${S.clock.h24 ? pad(h) : h}:${pad(d.getMinutes())}<small>:${pad(d.getSeconds())}</small>`;
+    const s = (ampm ? ampm + '　' : '') + d.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
+    if (s !== lastSub || force) { sub.textContent = s; lastSub = s; }
+  }
+  if (html !== lastHTML || force) { disp.innerHTML = html; lastHTML = html; }
+  disp.classList.toggle('long', long);
+  bar.classList.toggle('show', prog != null && edit == null);
+  if (prog != null) barIn.style.width = (Math.max(0, Math.min(1, prog)) * 100).toFixed(2) + '%';
+
+  // tab title: show whatever is running
+  if (ringing) title = '⏰ ' + ringing.msg;
+  else if (CD.run(S.timer)) title = hms(CD.left(S.timer), true).text + ' · タイマー';
+  else if (CD.run(S.pomo)) title = hms(CD.left(S.pomo), true).text + ' · ' + PHASE[S.pomo.phase];
+  else if (swRun()) title = hms(swEl(), false).text + ' · ストップウォッチ';
+  else if (m === 'clock') title = html.replace(/<[^>]+>/g, '');
+  if (title !== lastTitle) { document.title = title; lastTitle = title; }
+}
+
+/* ---------- events ---------- */
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => setMode(b.dataset.mode));
+/* scroll / drag on a digit group to adjust the timer */
+const MAXS = 99 * 3600 + 59 * 60 + 59;
+const canAdjust = () => S.mode === 'timer' && !CD.run(S.timer) && !ringing && edit == null;
+const unitAt = t => +(t.closest?.('[data-u]')?.dataset.u || 60);
+function bump(u, dir) {
+  const cur = Math.ceil(CD.left(S.timer) / 1000);
+  const next = Math.max(0, Math.min(MAXS, cur + dir * u));
+  CD.set(S.timer, next * 1000);
+  save(); ui();
+}
+let wheelAcc = 0;
+disp.addEventListener('wheel', e => {
+  if (!canAdjust()) return;
+  e.preventDefault();
+  const u = unitAt(e.target);
+  let d = e.deltaMode ? e.deltaY * 40 : e.deltaY;
+  if (Math.abs(d) >= 50) return bump(u, d < 0 ? 1 : -1);   // mouse wheel notch = 1 step
+  wheelAcc += d;                                            // trackpad: accumulate
+  while (Math.abs(wheelAcc) >= 30) { bump(u, wheelAcc < 0 ? 1 : -1); wheelAcc -= Math.sign(wheelAcc) * 30; }
+}, { passive: false });
+
+let dragU = null, dragY = 0, dragSteps = 0, dragged = false;
+disp.addEventListener('pointerdown', e => {
+  if (!canAdjust() || e.button > 0) return;
+  dragU = unitAt(e.target); dragY = e.clientY; dragSteps = 0; dragged = false;
+  disp.setPointerCapture(e.pointerId);
+});
+disp.addEventListener('pointermove', e => {
+  if (dragU == null) return;
+  const dy = dragY - e.clientY;
+  if (Math.abs(dy) > 6) dragged = true;
+  const steps = Math.trunc(dy / 24);
+  while (dragSteps !== steps) { const s = steps > dragSteps ? 1 : -1; dragSteps += s; bump(dragU, s); }
+});
+const endDrag = () => { if (dragU != null) { dragU = null; tick(true); } };
+disp.addEventListener('pointerup', endDrag);
+disp.addEventListener('pointercancel', endDrag);
+
+disp.addEventListener('click', () => {
+  if (dragged) { dragged = false; return; }
+  if (S.mode === 'timer') startEdit();
+  else if (S.mode === 'clock') act(() => S.clock.h24 = !S.clock.h24)();
+});
+kb.addEventListener('input', () => {
+  edit = kb.value.replace(/\D/g, '').replace(/^0+/, '').slice(0, 6);
+  kb.value = edit; ui();
+});
+kb.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); commit(); }
+  else if (e.key === 'Escape') { e.preventDefault(); cancelEdit(); }
+});
+kb.addEventListener('blur', () => { setTimeout(() => { if (edit === '' && document.activeElement !== kb) cancelEdit(); }, 150); });
+
+// any click while ringing just silences
+document.addEventListener('click', e => { if (ringing) { e.stopPropagation(); e.preventDefault(); dismiss(); } }, true);
+
+document.addEventListener('keydown', e => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.target.matches('input')) return;
+  if (ringing) { e.preventDefault(); return dismiss(); }
+  const k = e.key;
+  if (k === 'ArrowRight' || k === 'ArrowLeft') {
+    const i = MODES.indexOf(S.mode) + (k === 'ArrowRight' ? 1 : -1);
+    return setMode(MODES[(i + MODES.length) % MODES.length]);
+  }
+  if (k === 'f' || k === 'F') return toggleFs();
+  if (S.mode === 'timer') {
+    if (/^\d$/.test(k) && !CD.run(S.timer)) { e.preventDefault(); return typeDigit(k); }
+    if (edit != null) {
+      if (k === 'Backspace') { edit = edit.slice(0, -1); kb.value = edit; return ui(); }
+      if (k === 'Escape') return cancelEdit();
+      if (k === 'Enter' || k === ' ') { e.preventDefault(); return commit(); }
+    }
+    if (k === 'ArrowUp' || k === 'ArrowDown') {
+      e.preventDefault();
+      return act(() => {
+        const d = k === 'ArrowUp' ? MIN : -MIN;
+        if (CD.run(S.timer) || CD.left(S.timer) < S.timer.dur) CD.add(S.timer, d);
+        else CD.set(S.timer, Math.max(MIN, S.timer.dur + d));
+      })();
+    }
+  }
+  if (k === ' ' || k === 'Enter') { if (e.target.tagName === 'BUTTON' && k === 'Enter') return; e.preventDefault(); return primary(); }
+  if (k === 'r' || k === 'R') return reset();
+  if ((k === 'l' || k === 'L') && S.mode === 'stopwatch') return swLap();
+});
+
+function toggleFs() {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen?.().catch(() => {});
+}
+$('#fs').onclick = toggleFs;
+if (!document.documentElement.requestFullscreen) $('#fs').style.display = 'none';
+
+function applyTheme() { if (S.theme) document.documentElement.dataset.theme = S.theme; else delete document.documentElement.dataset.theme; }
+$('#theme').onclick = () => {
+  const dark = S.theme ? S.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  S.theme = dark ? 'light' : 'dark'; applyTheme(); save();
+};
+applyTheme();
+
+document.addEventListener('visibilitychange', () => { wake(); tick(true); });
+
+// restore: a timer that ended while the page was closed
+ui();
+setInterval(() => tick(false), 50);
+})();
+</script>
+</body>
+</html>
