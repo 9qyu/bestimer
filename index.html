@@ -51,7 +51,8 @@ header{display:flex;justify-content:center;align-items:center;padding:16px;posit
 .tabs button.live i{display:block}
 .tools{position:absolute;right:16px;top:50%;transform:translateY(-50%);display:flex;gap:4px}
 .icon{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;color:var(--sub)}
-.icon:hover{color:var(--fg);background:var(--soft)}
+.icon:hover,.icon.on{color:var(--fg);background:var(--soft)}
+.pip-holder{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;color:var(--sub);font-size:15px}
 .icon svg{width:18px;height:18px}
 
 /* main */
@@ -138,6 +139,7 @@ main{flex:1;display:flex;flex-direction:column;align-items:center;justify-conten
   </nav>
   <div class="tools">
     <button class="icon" id="theme" title="テーマ切替" aria-label="テーマ切替"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></svg></button>
+    <button class="icon" id="pip" title="小窓で表示 (P)" aria-label="小窓で表示"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="12" y="11" width="7" height="6" rx="1" fill="currentColor"/></svg></button>
     <button class="icon" id="fs" title="全画面 (F)" aria-label="全画面"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
   </div>
 </header>
@@ -241,7 +243,7 @@ function askNotify() {
 function ring(src, msg) {
   ringing = { src, msg };
   S.mode = src; edit = null;
-  document.body.classList.add('ringing');
+  bodyCls('ringing', true);
   chime(); clearInterval(ringIv); clearTimeout(ringTo);
   ringIv = setInterval(chime, 1400);
   ringTo = setTimeout(() => clearInterval(ringIv), 60000);
@@ -256,7 +258,7 @@ function dismiss() {
   clearInterval(ringIv); clearTimeout(ringTo);
   if (ringing.src === 'timer') CD.reset(S.timer);
   ringing = null;
-  document.body.classList.remove('ringing');
+  bodyCls('ringing', false);
   save(); ui();
 }
 let wl = null;
@@ -336,6 +338,16 @@ const setMode = act(m => { if (m !== 'timer') { edit = null; kb.blur(); } S.mode
 /* ---------- render ---------- */
 const disp = $('#disp'), sub = $('#sub'), bar = $('#bar'), barIn = bar.firstElementChild,
       ctrls = $('#ctrls'), extra = $('#extra'), kb = $('#kb');
+const tabsEl = $('.tabs'), pipBtn = $('#pip');
+const appParts = [$('header'), $('main'), kb];            // what moves into the PiP window
+const pipHolder = Object.assign(document.createElement('div'), { className: 'pip-holder',
+  innerHTML: '<p>小窓で表示中</p><button class="btn">ここに戻す</button>' });
+pipHolder.querySelector('button').onclick = () => closePip();
+// body classes (ringing / rest) must apply in whichever window shows the UI
+function bodyCls(name, on) {
+  document.body.classList.toggle(name, on);
+  if (pipWin) pipWin.document.body.classList.toggle(name, on);
+}
 
 function btn(label, fn, cls = '', title = '') {
   const b = document.createElement('button');
@@ -346,13 +358,13 @@ function btn(label, fn, cls = '', title = '') {
 function el(html) { const d = document.createElement('div'); d.innerHTML = html; return d.firstElementChild; }
 
 function ui() {
-  document.querySelectorAll('.tabs button').forEach(b => {
+  tabsEl.querySelectorAll('button').forEach(b => {
     const m = b.dataset.mode;
     b.setAttribute('aria-selected', m === S.mode);
     const live = (m === 'timer' && CD.run(S.timer)) || (m === 'stopwatch' && swRun()) || (m === 'pomodoro' && CD.run(S.pomo));
     b.classList.toggle('live', live && m !== S.mode);
   });
-  document.body.classList.toggle('rest', S.mode === 'pomodoro' && S.pomo.phase !== 'work');
+  bodyCls('rest', S.mode === 'pomodoro' && S.pomo.phase !== 'work');
   ctrls.replaceChildren(); extra.replaceChildren(); sub.replaceChildren();
   disp.classList.toggle('click', S.mode === 'timer' && !CD.run(S.timer));
   disp.title = S.mode === 'timer' && !CD.run(S.timer) ? 'クリックして時間を入力' : S.mode === 'clock' ? 'クリックで12/24時間切替' : '';
@@ -507,6 +519,109 @@ function tick(force) {
   else if (swRun()) title = hms(swEl(), false).text + ' · ストップウォッチ';
   else if (m === 'clock') title = html.replace(/<[^>]+>/g, '');
   if (title !== lastTitle) { document.title = title; lastTitle = title; }
+  pipRender();
+}
+
+/* ---------- picture-in-picture ---------- */
+// Chrome/Edge: Document PiP (real buttons in an always-on-top window).
+// Others (Safari etc.): video PiP fed from a canvas; play/pause maps to start/stop.
+let pipWin = null, pipEls = null, pipVideo = null, pipCanvas = null, pipLast = '';
+const MODE_LABEL = { timer: 'タイマー', stopwatch: 'ストップウォッチ', clock: '' };
+
+function pipState() {
+  if (ringing) return { sub: ringing.msg, main: '停止', reset: false };
+  const m = S.mode;
+  if (m === 'timer') {
+    const run = CD.run(S.timer), paused = !run && CD.left(S.timer) > 0 && CD.left(S.timer) < S.timer.dur;
+    return { sub: MODE_LABEL.timer, main: run ? '一時停止' : paused ? '再開' : '開始', pause: run, reset: true };
+  }
+  if (m === 'stopwatch') {
+    const run = swRun();
+    return { sub: MODE_LABEL.stopwatch, main: run ? '停止' : swEl() > 0 ? '再開' : '開始', pause: run, reset: true };
+  }
+  if (m === 'pomodoro') {
+    const run = CD.run(S.pomo), started = run || CD.left(S.pomo) < S.pomo.dur;
+    return { sub: PHASE[S.pomo.phase], main: run ? '一時停止' : started ? '再開' : '開始', pause: run, reset: true };
+  }
+  return { sub: '', main: null, reset: false };
+}
+const pipMain = () => ringing ? dismiss() : primary();
+
+async function openPip() {
+  if (pipWin || pipVideo) return closePip();
+  if ('documentPictureInPicture' in window) {
+    // Move the real app (header + main + input) into the PiP window, so every
+    // control works there exactly as on the page; move it back when it closes.
+    try {
+      pipWin = await documentPictureInPicture.requestWindow({ width: 440, height: 460 });
+    } catch { pipWin = null; return; }
+    const d = pipWin.document;
+    d.head.innerHTML = '<meta charset="utf-8"><title>Bestimer</title>';
+    document.querySelectorAll('link[rel="stylesheet"], style').forEach(n => d.head.append(n.cloneNode(true)));
+    d.head.append(Object.assign(d.createElement('style'), { textContent:
+      '#fs{display:none!important} main{padding:8px 12px 16px;gap:14px} .disp{font-size:min(18vw,22vh)}' }));
+    d.body.className = document.body.className;
+    applyTheme();
+    document.body.insertBefore(pipHolder, appParts[0]);
+    d.body.append(...appParts);
+    d.addEventListener('keydown', onKey);
+    d.addEventListener('click', onRingClick, true);
+    pipWin.setInterval(() => tick(false), 50);   // the PiP window stays visible, so it keeps the clock smooth
+    pipWin.addEventListener('pagehide', () => {
+      pipHolder.before(...appParts);              // bring the UI home
+      pipHolder.remove();
+      pipWin = null; pipLast = '';
+      pipBtn.classList.remove('on');
+      ui();
+    });
+  } else if (document.pictureInPictureEnabled) {
+    pipCanvas = document.createElement('canvas'); pipCanvas.width = 640; pipCanvas.height = 360;
+    pipVideo = Object.assign(document.createElement('video'), { muted: true, playsInline: true });
+    pipVideo.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none';
+    document.body.append(pipVideo);
+    pipRender(true);
+    pipVideo.srcObject = pipCanvas.captureStream(20);
+    try { await pipVideo.play(); await pipVideo.requestPictureInPicture(); }
+    catch { closePip(); return; }
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.setActionHandler('play', () => { pipMain(); pipVideo?.play(); });
+      navigator.mediaSession.setActionHandler('pause', () => { pipMain(); pipVideo?.play(); });
+    }
+    pipVideo.addEventListener('leavepictureinpicture', closePip);
+  } else return;
+  pipBtn.classList.add('on');
+  pipRender(true);
+}
+function closePip() {
+  if (pipWin) pipWin.close();
+  if (pipVideo) {
+    if (document.pictureInPictureElement === pipVideo) document.exitPictureInPicture().catch(() => {});
+    pipVideo.srcObject?.getTracks().forEach(t => t.stop());
+    pipVideo.remove(); pipVideo = pipCanvas = null;
+  }
+  pipLast = '';
+  pipBtn.classList.remove('on');
+}
+
+function pipRender(force) {
+  if (pipWin) { if (pipWin.document.title !== document.title) pipWin.document.title = document.title; return; }
+  if (!pipVideo) return;
+  const st = pipState(), html = lastHTML === '#segs' ? disp.textContent : disp.innerHTML;
+  const key = html + '|' + st.sub + '|' + st.main + '|' + document.documentElement.dataset.theme + document.body.className;
+  if (key === pipLast && !force) return;
+  pipLast = key;
+  {
+    const c = pipCanvas.getContext('2d'), cs = getComputedStyle(document.body);
+    const text = html.replace(/<[^>]+>/g, '');
+    c.fillStyle = cs.backgroundColor; c.fillRect(0, 0, 640, 360);
+    c.fillStyle = document.body.classList.contains('ringing') ? cs.getPropertyValue('--accent') : cs.color;
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    let size = 170; c.font = `700 ${size}px Manrope, Inter, sans-serif`;
+    while (c.measureText(text).width > 580 && size > 40) { size -= 6; c.font = `700 ${size}px Manrope, Inter, sans-serif`; }
+    c.fillText(text, 320, 196);
+    c.fillStyle = cs.getPropertyValue('--sub'); c.font = '500 26px Inter, sans-serif';
+    c.fillText(st.sub, 320, 64);
+  }
 }
 
 // Adjustable timer digits: keep the same span elements and only swap their text,
@@ -587,12 +702,14 @@ kb.addEventListener('keydown', e => {
   if (e.key === 'Enter') { e.preventDefault(); commit(); }
   else if (e.key === 'Escape') { e.preventDefault(); cancelEdit(); }
 });
-kb.addEventListener('blur', () => { setTimeout(() => { if (edit === '' && document.activeElement !== kb) cancelEdit(); }, 150); });
+kb.addEventListener('blur', () => { setTimeout(() => { if (edit === '' && kb.ownerDocument.activeElement !== kb) cancelEdit(); }, 150); });
 
 // any click while ringing just silences
-document.addEventListener('click', e => { if (ringing) { e.stopPropagation(); e.preventDefault(); dismiss(); } }, true);
+function onRingClick(e) { if (ringing) { e.stopPropagation(); e.preventDefault(); dismiss(); } }
+document.addEventListener('click', onRingClick, true);
 
-document.addEventListener('keydown', e => {
+document.addEventListener('keydown', onKey);
+function onKey(e) {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.target.matches('input')) return;
   if (ringing) { e.preventDefault(); return dismiss(); }
@@ -602,6 +719,7 @@ document.addEventListener('keydown', e => {
     return setMode(MODES[(i + MODES.length) % MODES.length]);
   }
   if (k === 'f' || k === 'F') return toggleFs();
+  if (k === 'p' || k === 'P') return openPip();
   if (S.mode === 'timer') {
     if (/^\d$/.test(k) && !CD.run(S.timer)) { e.preventDefault(); return typeDigit(k); }
     if (edit != null) {
@@ -621,16 +739,24 @@ document.addEventListener('keydown', e => {
   if (k === ' ' || k === 'Enter') { if (e.target.tagName === 'BUTTON' && k === 'Enter') return; e.preventDefault(); return primary(); }
   if (k === 'r' || k === 'R') return reset();
   if ((k === 'l' || k === 'L') && S.mode === 'stopwatch') return swLap();
-});
+}
 
 function toggleFs() {
+  if (pipWin) return;
   if (document.fullscreenElement) document.exitFullscreen();
   else document.documentElement.requestFullscreen?.().catch(() => {});
 }
 $('#fs').onclick = toggleFs;
+$('#pip').onclick = openPip;
+if (!('documentPictureInPicture' in window) && !document.pictureInPictureEnabled) $('#pip').style.display = 'none';
 if (!document.documentElement.requestFullscreen) $('#fs').style.display = 'none';
 
-function applyTheme() { if (S.theme) document.documentElement.dataset.theme = S.theme; else delete document.documentElement.dataset.theme; }
+function applyTheme() {
+  for (const r of [document.documentElement, pipWin?.document.documentElement]) {
+    if (!r) continue;
+    if (S.theme) r.dataset.theme = S.theme; else delete r.dataset.theme;
+  }
+}
 $('#theme').onclick = () => {
   const dark = S.theme ? S.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
   S.theme = dark ? 'light' : 'dark'; applyTheme(); save();
