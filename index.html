@@ -547,6 +547,32 @@ function pipState() {
 }
 const pipMain = () => ringing ? dismiss() : primary();
 
+// PiP layout: everything scales with the window, and parts drop away as it shrinks
+// (extras → header/labels → buttons) so the digits always stay readable.
+const PIP_CSS = `
+body.pip{height:100vh;min-height:0;overflow:hidden}
+body.pip header{flex-direction:row;flex-wrap:nowrap;gap:6px;padding:clamp(4px,2vh,10px) 8px 0}
+body.pip .tools{position:static;transform:none;gap:0}
+body.pip #fs{display:none!important}
+body.pip .icon{width:30px;height:30px}
+body.pip .tabs{padding:3px}
+body.pip .tabs button,body.pip .chip{padding:clamp(4px,1.4vh,8px) clamp(6px,2.4vw,14px);font-size:clamp(10px,3.3vw,14px)}
+body.pip .tabs button i{top:3px;right:3px}
+body.pip main{padding:4px 10px 10px;gap:clamp(6px,2.4vh,16px);min-height:0}
+body.pip .sub{min-height:0}
+body.pip .disp{font-size:min(19vw,24vh)}
+body.pip .bar{width:84vw}
+body.pip .ctrls{min-height:0;gap:8px;flex-wrap:nowrap}
+body.pip .btn{height:clamp(30px,11vh,52px);min-width:clamp(60px,25vw,120px);padding:0 10px;font-size:clamp(12px,3.8vw,16px)}
+body.pip .extra{display:flex;min-height:0;gap:8px}
+body.pip .laps{max-height:20vh;font-size:13px}
+body.pip .laps div{padding:5px 4px}
+@media (max-width:360px){ body.pip .tools{display:none} }
+@media (max-height:360px){ body.pip .extra{display:none} body.pip .disp{font-size:min(19vw,30vh)} }
+@media (max-height:250px){ body.pip header,body.pip .sub,body.pip .bar{display:none} body.pip .disp{font-size:min(20vw,44vh)} }
+@media (max-height:150px){ body.pip .ctrls{display:none} body.pip main{padding:0} body.pip .disp{font-size:min(21vw,76vh)} }
+`;
+
 async function openPip() {
   if (pipWin || pipVideo) return closePip();
   if ('documentPictureInPicture' in window) {
@@ -558,9 +584,9 @@ async function openPip() {
     const d = pipWin.document;
     d.head.innerHTML = '<meta charset="utf-8"><title>Bestimer</title>';
     document.querySelectorAll('link[rel="stylesheet"], style').forEach(n => d.head.append(n.cloneNode(true)));
-    d.head.append(Object.assign(d.createElement('style'), { textContent:
-      '#fs{display:none!important} main{padding:8px 12px 16px;gap:14px} .disp{font-size:min(18vw,22vh)}' }));
+    d.head.append(Object.assign(d.createElement('style'), { textContent: PIP_CSS }));
     d.body.className = document.body.className;
+    d.body.classList.add('pip');
     applyTheme();
     document.body.insertBefore(pipHolder, appParts[0]);
     d.body.append(...appParts);
