@@ -115,6 +115,28 @@ main{flex:1;display:flex;flex-direction:column;align-items:center;justify-conten
 
 #kb{position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none;font-size:16px;border:0;padding:0}
 
+/* voice assistant panel */
+.voice{position:fixed;z-index:20;left:50%;bottom:max(20px,env(safe-area-inset-bottom));transform:translateX(-50%);
+  width:min(460px,calc(100vw - 32px));display:flex;align-items:center;gap:16px;padding:16px 20px;
+  border-radius:28px;background:var(--soft);cursor:pointer}
+.voice[hidden]{display:none}
+.orb{position:relative;flex:none;width:32px;height:32px;border-radius:50%;background:var(--fg)}
+.orb::after{content:"";position:absolute;inset:0;border-radius:50%;background:var(--fg);opacity:0}
+.voice[data-state="listen"] .orb{animation:orb 1.6s ease-in-out infinite}
+.voice[data-state="listen"] .orb::after{animation:halo 1.6s ease-out infinite}
+.voice[data-state="reply"] .orb{transform:scale(.72)}
+@keyframes orb{50%{transform:scale(.86)}}
+@keyframes halo{0%{transform:scale(1);opacity:.22}100%{transform:scale(1.7);opacity:0}}
+.vbody{min-width:0;flex:1}
+#vtext{font-size:17px;font-weight:600;line-height:1.4;overflow-wrap:anywhere}
+#vhint{font-size:13px;color:var(--sub);line-height:1.4;margin-top:2px;overflow-wrap:anywhere}
+#vhint:empty{display:none}
+@media (prefers-reduced-motion:reduce){.voice .orb,.voice .orb::after{animation:none!important}}
+
+@media (max-width:820px){
+  header{flex-direction:column;gap:8px}
+  .tools{position:static;transform:none}
+}
 @media (max-width:520px){
   header{flex-direction:column;gap:8px;padding:12px 16px}
   .tools{position:static;transform:none}
@@ -138,6 +160,7 @@ main{flex:1;display:flex;flex-direction:column;align-items:center;justify-conten
     <button role="tab" data-mode="clock">時計</button>
   </nav>
   <div class="tools">
+    <button class="icon" id="mic" title="音声で操作 (V)" aria-label="音声で操作"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
     <button class="icon" id="theme" title="テーマ切替" aria-label="テーマ切替"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></svg></button>
     <button class="icon" id="pip" title="小窓で表示 (P)" aria-label="小窓で表示"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="12" y="11" width="7" height="6" rx="1" fill="currentColor"/></svg></button>
     <button class="icon" id="fs" title="全画面 (F)" aria-label="全画面"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
@@ -152,6 +175,10 @@ main{flex:1;display:flex;flex-direction:column;align-items:center;justify-conten
   <div class="extra" id="extra"></div>
 </main>
 <input id="kb" inputmode="numeric" pattern="[0-9]*" autocomplete="off" aria-label="時間を入力">
+<div class="voice" id="voice" role="status" aria-live="polite" hidden>
+  <div class="orb"></div>
+  <div class="vbody"><p id="vtext"></p><p id="vhint"></p></div>
+</div>
 
 
 <script>
@@ -173,6 +200,7 @@ const DEF = {
           cfg: { work: 25, short: 5, long: 15, every: 4, auto: false } },
   clock: { h24: true },
   theme: null,
+  voiceSeen: false,
 };
 let S = structuredClone(DEF);
 try {
@@ -339,7 +367,7 @@ const setMode = act(m => { if (m !== 'timer') { edit = null; kb.blur(); } S.mode
 const disp = $('#disp'), sub = $('#sub'), bar = $('#bar'), barIn = bar.firstElementChild,
       ctrls = $('#ctrls'), extra = $('#extra'), kb = $('#kb');
 const tabsEl = $('.tabs'), pipBtn = $('#pip');
-const appParts = [$('header'), $('main'), kb];            // what moves into the PiP window
+const appParts = [$('header'), $('main'), kb, $('#voice')];           // what moves into the PiP window
 const pipHolder = Object.assign(document.createElement('div'), { className: 'pip-holder',
   innerHTML: '<p>小窓で表示中</p><button class="btn">ここに戻す</button>' });
 pipHolder.querySelector('button').onclick = () => closePip();
@@ -567,6 +595,10 @@ body.pip .btn{height:clamp(30px,11vh,52px);min-width:clamp(60px,25vw,120px);padd
 body.pip .extra{display:flex;min-height:0;gap:8px}
 body.pip .laps{max-height:20vh;font-size:13px}
 body.pip .laps div{padding:5px 4px}
+body.pip .voice{bottom:6px;width:calc(100vw - 12px);gap:10px;padding:8px 12px;border-radius:18px}
+body.pip .orb{width:20px;height:20px}
+body.pip #vtext{font-size:13px}
+body.pip #vhint{font-size:11px}
 @media (max-width:360px){ body.pip .tools{display:none} }
 @media (max-height:360px){ body.pip .extra{display:none} body.pip .disp{font-size:min(19vw,30vh)} }
 @media (max-height:250px){ body.pip header,body.pip .sub,body.pip .bar{display:none} body.pip .disp{font-size:min(20vw,44vh)} }
@@ -746,6 +778,8 @@ function onKey(e) {
   }
   if (k === 'f' || k === 'F') return toggleFs();
   if (k === 'p' || k === 'P') return openPip();
+  if (k === 'v' || k === 'V') return toggleVoice();
+  if (k === 'Escape' && !voice.hidden) return vClose();
   if (S.mode === 'timer') {
     if (/^\d$/.test(k) && !CD.run(S.timer)) { e.preventDefault(); return typeDigit(k); }
     if (edit != null) {
@@ -766,6 +800,221 @@ function onKey(e) {
   if (k === 'r' || k === 'R') return reset();
   if ((k === 'l' || k === 'L') && S.mode === 'stopwatch') return swLap();
 }
+
+/* ---------- voice assistant ---------- */
+/* voice-parser:start */
+function parseVoice(raw) {
+  const t = raw.normalize('NFKC').replace(/[\s、。,!?]/g, '').replace(/一時停止/g, 'ポーズ');
+  const N = '([0-9]+|[〇零一二三四五六七八九十百千]+)';
+  const D = { 〇: 0, 零: 0, 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+  const num = s => {
+    if (/^\d+$/.test(s)) return +s;
+    if (!/[十百千]/.test(s)) return +[...s].map(c => D[c]).join('');
+    let total = 0, cur = 0;
+    for (const c of s) {
+      const u = { 十: 10, 百: 100, 千: 1000 }[c];
+      if (u) { total += (cur || 1) * u; cur = 0; } else cur = cur * 10 + D[c];
+    }
+    return total + cur;
+  };
+
+  if (/何時(?!間)|なんじ/.test(t)) return { type: 'time' };
+  if (/何日|何曜|日付/.test(t)) return { type: 'date' };
+  if (new RegExp(N + '時(?!間)').test(t)) return { type: 'clockTime' };
+
+  let sec = null, m;
+  if ((m = t.match(new RegExp(N + '時間(半)?')))) sec = num(m[1]) * 3600 + (m[2] ? 1800 : 0);
+  if ((m = t.match(new RegExp(N + '分間?(半)?')))) sec = (sec || 0) + num(m[1]) * 60 + (m[2] ? 30 : 0);
+  if ((m = t.match(new RegExp(N + '秒')))) sec = (sec || 0) + num(m[1]);
+  if (sec != null) {
+    if (/追加|足して|たして|延長|増やして|プラス/.test(t)) return { type: 'add', sec };
+    if (/減らして|引いて|ひいて|マイナス|短く/.test(t)) return { type: 'add', sec: -sec };
+    return { type: 'set', sec, start: !/セット|設定|合わせ/.test(t) || /開始|スタート|始め/.test(t) };
+  }
+  if (/残り|あと(何|なん|どれ|どの)|何分|何秒|何時間/.test(t)) return { type: 'remain' };
+  if (/ダークモード|暗く/.test(t)) return { type: 'theme', theme: 'dark' };
+  if (/ライトモード|明るく/.test(t)) return { type: 'theme', theme: 'light' };
+
+  const mode = /ストップウ[ォオ]ッチ/.test(t) ? 'stopwatch' : /ポモドーロ/.test(t) ? 'pomodoro'
+    : /時計|とけい/.test(t) ? 'clock' : /タイマー/.test(t) ? 'timer' : null;
+  const rest = t.replace(/ストップウ[ォオ]ッチ/g, '');
+  const startWord = /スタート|開始|始め|はじめ|再開|動かして|測って|計って|はかって/.test(rest);
+
+  const phase = /長い休憩|長休憩/.test(rest) ? 'long' : /休憩/.test(rest) ? 'short' : /集中/.test(rest) ? 'work' : null;
+  if (phase) return { type: 'phase', phase, start: startWord };
+  if (/リセット|クリア|やり直/.test(rest)) return { type: 'reset', mode };
+  if (/ラップ/.test(rest)) return { type: 'lap' };
+  if (/スキップ|次へ|次に/.test(rest)) return { type: 'skip' };
+  if (/ストップ|止め|とめて|停止|ポーズ|待って|まって/.test(rest)) return { type: 'pause', mode };
+  if (startWord) return { type: 'start', mode };
+  if (mode) return { type: 'mode', mode };
+  return null;
+}
+/* voice-parser:end */
+
+const VOICE_LABEL = { timer: 'タイマー', stopwatch: 'ストップウォッチ', pomodoro: 'ポモドーロ', clock: '時計' };
+const isRun = m => m === 'timer' ? CD.run(S.timer) : m === 'stopwatch' ? swRun() : m === 'pomodoro' ? CD.run(S.pomo) : false;
+const activeMode = () => isRun(S.mode) ? S.mode : MODES.find(isRun) || S.mode;
+function spoken(sec) {
+  const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60;
+  return (h ? h + '時間' : '') + (m ? m + '分' : '') + (s || !(h || m) ? s + '秒' : '');
+}
+function setRunning(m, on) {
+  if (m === 'timer') on ? CD.start(S.timer) : CD.pause(S.timer);
+  else if (m === 'pomodoro') on ? CD.start(S.pomo) : CD.pause(S.pomo);
+  else if (m === 'stopwatch') {
+    if (on && !swRun()) S.sw.start = now();
+    if (!on && swRun()) { S.sw.acc = swEl(); S.sw.start = null; }
+  }
+}
+function runVoice(c) {
+  if (edit != null) { edit = null; kb.blur(); }
+  const d = new Date();
+  switch (c.type) {
+    case 'time': return `${d.getHours()}時${d.getMinutes()}分です`;
+    case 'date': return d.toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'long' }) + 'です';
+    case 'clockTime': return '時刻の指定にはまだ対応していません。「30分」のように言ってください';
+    case 'set': {
+      const sec = Math.min(MAXS, c.sec);
+      if (sec <= 0) return '1秒以上の時間を言ってください';
+      S.mode = 'timer'; CD.set(S.timer, sec * 1000);
+      if (c.start) CD.start(S.timer);
+      return `${spoken(sec)}のタイマーを${c.start ? '開始しました' : 'セットしました'}`;
+    }
+    case 'add': {
+      const o = S.mode === 'pomodoro' ? S.pomo : S.timer;
+      if (o === S.timer && !CD.run(o) && CD.left(o) === o.dur) {
+        CD.set(o, Math.max(0, Math.min(MAXS * 1000, o.dur + c.sec * 1000)));
+      } else CD.add(o, c.sec * 1000);
+      if (o === S.timer) S.mode = 'timer';
+      return `${spoken(Math.abs(c.sec))}${c.sec > 0 ? '増やしました' : '減らしました'}。残り${spoken(Math.ceil(CD.left(o) / 1000))}です`;
+    }
+    case 'remain': {
+      const m = activeMode();
+      if (m === 'timer' || m === 'pomodoro') return `残り${spoken(Math.ceil(CD.left(m === 'timer' ? S.timer : S.pomo) / 1000))}です`;
+      if (m === 'stopwatch') return `${spoken(Math.floor(swEl() / 1000))}経過しています`;
+      return '動いているタイマーはありません';
+    }
+    case 'theme': S.theme = c.theme; applyTheme(); return c.theme === 'dark' ? 'ダークモードにしました' : 'ライトモードにしました';
+    case 'phase':
+      S.mode = 'pomodoro'; pomoPhase(c.phase);
+      if (c.start) CD.start(S.pomo);
+      return `${PHASE[c.phase]}${c.start ? 'を開始しました' : 'に切り替えました'}`;
+    case 'reset': {
+      const m = c.mode || activeMode();
+      if (m === 'clock') return 'リセットするものはありません';
+      S.mode = m;
+      if (m === 'timer') CD.reset(S.timer);
+      else if (m === 'stopwatch') S.sw = { start: null, acc: 0, laps: [] };
+      else CD.reset(S.pomo);
+      return `${VOICE_LABEL[m]}をリセットしました`;
+    }
+    case 'lap':
+      if (!swRun()) return 'ストップウォッチは動いていません';
+      S.mode = 'stopwatch'; S.sw.laps.push(swEl());
+      return `ラップ${S.sw.laps.length}を記録しました`;
+    case 'skip': {
+      const on = CD.run(S.pomo);
+      S.mode = 'pomodoro'; pomoNext();
+      if (on) CD.start(S.pomo);
+      return `${PHASE[S.pomo.phase]}に進みました`;
+    }
+    case 'pause': {
+      const m = c.mode && isRun(c.mode) ? c.mode : activeMode();
+      if (!isRun(m)) return '動いているものはありません';
+      S.mode = m; setRunning(m, false);
+      return `${VOICE_LABEL[m]}を止めました`;
+    }
+    case 'start': {
+      const m = c.mode && c.mode !== 'clock' ? c.mode : S.mode === 'clock' ? 'timer' : S.mode;
+      S.mode = m;
+      if (isRun(m)) return `${VOICE_LABEL[m]}はもう動いています`;
+      if (m === 'timer' && S.timer.dur <= 0) return '時間を言ってください。例えば「5分」';
+      setRunning(m, true);
+      return `${VOICE_LABEL[m]}を開始しました`;
+    }
+    case 'mode': S.mode = c.mode; return `${VOICE_LABEL[c.mode]}にしました`;
+  }
+}
+
+const voice = $('#voice'), vText = $('#vtext'), vHint = $('#vhint'), micBtn = $('#mic');
+const VOICE_ERR = {
+  'not-allowed': 'マイクの使用が許可されていません',
+  'service-not-allowed': '音声認識を使えません。ブラウザの設定を確認してください',
+  'audio-capture': 'マイクが見つかりません',
+  network: '音声認識サービスに接続できません',
+};
+let rec = null, vHideTimer = 0;
+const getSR = () => window.SpeechRecognition || window.webkitSpeechRecognition;
+function vShow(state, text, hint = '') {
+  clearTimeout(vHideTimer);
+  voice.hidden = false; voice.dataset.state = state;
+  vText.textContent = text; vHint.textContent = hint;
+  micBtn.classList.toggle('on', state === 'listen');
+}
+function vClose() {
+  clearTimeout(vHideTimer);
+  const r = rec; rec = null;
+  if (r) try { r.abort(); } catch {}
+  window.speechSynthesis?.cancel();
+  voice.hidden = true; micBtn.classList.remove('on');
+}
+function vReply(text, hint = '') {
+  vShow('reply', text, hint);
+  const synth = window.speechSynthesis;
+  if (synth && window.SpeechSynthesisUtterance) {
+    synth.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'ja-JP'; u.rate = 1.05;
+    synth.speak(u);
+  }
+  vHideTimer = setTimeout(vClose, Math.max(3000, text.length * 190 + 1600));
+}
+function vHandle(alts) {
+  let cmd = null;
+  for (const a of alts) if ((cmd = parseVoice(a))) break;
+  if (!cmd) return vReply('もう一度お願いします', `「${alts[0]}」 例:5分、止めて、残りは?`);
+  const reply = runVoice(cmd);
+  save(); ui();
+  vReply(reply, `「${alts[0]}」`);
+}
+function startVoice() {
+  const SR = getSR();
+  if (!SR) return;
+  clearTimeout(vHideTimer);
+  window.speechSynthesis?.cancel();
+  audio();
+  const r = rec = new SR();
+  r.lang = 'ja-JP'; r.interimResults = true; r.maxAlternatives = 3; r.continuous = false;
+  let alts = [], err = null;
+  const finish = () => {
+    if (rec !== r) return;
+    rec = null;
+    if (alts.length) vHandle(alts);
+    else vReply(VOICE_ERR[err] || '聞き取れませんでした');
+  };
+  r.onresult = e => {
+    if (rec !== r) return;
+    const res = e.results[e.results.length - 1];
+    alts = [...res].map(a => a.transcript.trim()).filter(Boolean);
+    if (alts[0]) vShow('listen', alts[0]);
+    if (res.isFinal && alts.length) { finish(); try { r.stop(); } catch {} }
+  };
+  r.onerror = e => { err = e.error; };
+  r.onend = finish;
+  // Chrome and others process speech on a remote service: say so once, before the first use
+  const hint = S.voiceSeen ? '例:5分、止めて、残りは?' : '音声はブラウザの音声認識サービスに送られます';
+  if (!S.voiceSeen) { S.voiceSeen = true; save(); }
+  vShow('listen', '聞いています…', hint);
+  try { r.start(); } catch { rec = null; vReply('音声認識を開始できませんでした'); }
+}
+function toggleVoice() {
+  if (!getSR()) return;
+  if (rec) vClose(); else startVoice();
+}
+micBtn.onclick = toggleVoice;
+voice.onclick = vClose;
+if (!getSR()) micBtn.style.display = 'none';
 
 function toggleFs() {
   if (pipWin) return;
