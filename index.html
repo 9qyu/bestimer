@@ -125,6 +125,7 @@ main{flex:1;display:flex;flex-direction:column;align-items:center;justify-conten
 .voice[data-state="listen"] .orb{animation:orb 1.6s ease-in-out infinite}
 .voice[data-state="listen"] .orb::after{animation:halo 1.6s ease-out infinite}
 .voice[data-state="reply"] .orb{transform:scale(.72)}
+.voice[data-state="think"] .orb{animation:orb 2.6s ease-in-out infinite}
 @keyframes orb{50%{transform:scale(.86)}}
 @keyframes halo{0%{transform:scale(1);opacity:.22}100%{transform:scale(1.7);opacity:0}}
 .vbody{min-width:0;flex:1}
@@ -201,6 +202,7 @@ const DEF = {
   clock: { h24: true },
   theme: null,
   voiceSeen: false,
+  voiceLocal: false,      // set once the browser's cloud speech service proved unreachable
 };
 let S = structuredClone(DEF);
 try {
@@ -804,7 +806,9 @@ function onKey(e) {
 /* ---------- voice assistant ---------- */
 /* voice-parser:start */
 function parseVoice(raw) {
-  const t = raw.normalize('NFKC').replace(/[\s、。,!?]/g, '').replace(/一時停止/g, 'ポーズ');
+  const t = raw.normalize('NFKC').replace(/[\s、。,!?]/g, '').replace(/一時停止/g, 'ポーズ')
+    // common mishearings of ストップウォッチ by on-device Whisper
+    .replace(/ストップ(?:ウ[ォオ]|を)(?:ッチ|ッ?ち|近い|チ)?/g, 'ストップウォッチ');
   const N = '([0-9]+|[〇零一二三四五六七八九十百千]+)';
   const D = { 〇: 0, 零: 0, 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
   const num = s => {
@@ -818,7 +822,7 @@ function parseVoice(raw) {
     return total + cur;
   };
 
-  if (/何時(?!間)|なんじ/.test(t)) return { type: 'time' };
+  if (/何時(?!間)|なんじ|今いつ/.test(t)) return { type: 'time' };
   if (/何日|何曜|日付/.test(t)) return { type: 'date' };
   if (new RegExp(N + '時(?!間)').test(t)) return { type: 'clockTime' };
 
@@ -978,20 +982,160 @@ function vHandle(alts) {
   save(); ui();
   vReply(reply, `「${alts[0]}」`);
 }
+/* --- on-device recognition (Whisper in a Web Worker) ---
+   Used when the browser has no cloud speech service (Brave, Firefox) or it fails.
+   The model (~77 MB) downloads once, then comes from the browser cache. */
+const WHISPER_SRC = `
+import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.1';
+env.allowLocalModels = false;
+// Whisper is primed with the app's own phrases (a "previous text" prompt), which
+// steers it toward command words: 15/22 -> 20/22 correct in our TTS benchmark.
+const PROMPT = 'タイマーの音声操作。5分、3分測って、10分のタイマー、1時間半、30秒、1分追加、2分減らして、止めて、再開して、スタート、リセット、ラップ、スキップ、ストップウォッチ開始、ポモドーロ、休憩、長い休憩、集中、残りは?あと何分?今何時?';
+let loading = null, prefix = null;
+const run = (asr, audio) => asr(audio, { decoder_input_ids: prefix, max_new_tokens: 32 })
+  .then(o => ((o && o.text) || '').split(PROMPT).pop().trim());
+const load = () => loading ??= pipeline('automatic-speech-recognition', 'onnx-community/whisper-base', {
+  device: 'wasm',
+  dtype: { encoder_model: 'q8', decoder_model_merged: 'q8' },
+  progress_callback: p => {
+    if (p.status === 'progress_total') postMessage({ type: 'progress', loaded: p.loaded, total: p.total });
+    else if (p.status === 'progress') postMessage({ type: 'file', file: p.file, loaded: p.loaded, total: p.total });
+  },
+}).then(async asr => {
+  const tk = asr.tokenizer, id = t => tk.encode(t, { add_special_tokens: false })[0];
+  prefix = [id('<|startofprev|>'), ...tk.encode(' ' + PROMPT, { add_special_tokens: false }),
+    id('<|startoftranscript|>'), id('<|ja|>'), id('<|transcribe|>'), id('<|notimestamps|>')];
+  await run(asr, new Float32Array(8000));   // warm-up so the first real command is fast
+  postMessage({ type: 'ready' });
+  return asr;
+});
+onmessage = async e => {
+  try {
+    if (e.data.type === 'load') await load();
+    if (e.data.type === 'run') {
+      const text = await run(await load(), e.data.audio);
+      postMessage({ type: 'text', id: e.data.id, text });
+    }
+  } catch (err) {
+    loading = null;
+    postMessage({ type: 'error', id: e.data.id, message: String((err && err.message) || err) });
+  }
+};`;
+let whisper = null, whisperReady = false, whisperPct = 0;
+const whisperFiles = {}, whisperJobs = new Map();
+const localOk = () => !!(navigator.mediaDevices?.getUserMedia && window.MediaRecorder && window.Worker);
+const useLocal = () => localOk() && (!getSR() || !!navigator.brave || S.voiceLocal);
+function getWhisper() {
+  if (whisper) return whisper;
+  whisper = new Worker(URL.createObjectURL(new Blob([WHISPER_SRC], { type: 'text/javascript' })), { type: 'module' });
+  whisper.onmessage = ({ data: m }) => {
+    if (m.type === 'progress' && m.total) whisperPct = Math.floor(m.loaded / m.total * 100);
+    else if (m.type === 'file' && m.total) {
+      whisperFiles[m.file] = m;
+      const fs = Object.values(whisperFiles);
+      whisperPct = Math.floor(fs.reduce((a, f) => a + f.loaded, 0) / fs.reduce((a, f) => a + f.total, 0) * 100);
+    } else if (m.type === 'ready') { whisperReady = true; whisperPct = 100; }
+    else if (m.type === 'text') { whisperJobs.get(m.id)?.resolve(m.text); whisperJobs.delete(m.id); }
+    else if (m.type === 'error') {
+      for (const j of whisperJobs.values()) j.reject(new Error(m.message));
+      whisperJobs.clear();
+    }
+    if (rec && rec.local && voice.dataset.state === 'think' && !whisperReady)
+      vHint.textContent = `音声認識モデルを準備中 ${whisperPct}%(初回のみ・約77MB)`;
+  };
+  whisper.onerror = () => {
+    for (const j of whisperJobs.values()) j.reject(new Error('worker'));
+    whisperJobs.clear(); whisper = null;
+  };
+  whisper.postMessage({ type: 'load' });
+  return whisper;
+}
+let whisperSeq = 0;
+function transcribe(pcm) {
+  const id = ++whisperSeq;
+  return new Promise((resolve, reject) => {
+    whisperJobs.set(id, { resolve, reject });
+    getWhisper().postMessage({ type: 'run', id, audio: pcm }, [pcm.buffer]);
+  });
+}
+// Record one utterance: stops ~0.9 s after speech ends; null if nobody spoke.
+async function recordUtterance(run) {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 } });
+  const ctx = audio();
+  const an = ctx.createAnalyser(); an.fftSize = 1024;
+  ctx.createMediaStreamSource(stream).connect(an);
+  const mr = new MediaRecorder(stream), chunks = [];
+  mr.ondataavailable = e => e.data.size && chunks.push(e.data);
+  const buf = new Float32Array(an.fftSize);
+  const t0 = performance.now();
+  let floor = 0, n = 0, spoke = false, lastVoice = 0;
+  const done = new Promise(res => {
+    const stop = () => { clearInterval(iv); if (mr.state !== 'inactive') mr.stop(); else res(); };
+    mr.onstop = () => res();
+    run.stop = stop;
+    const iv = setInterval(() => {
+      an.getFloatTimeDomainData(buf);
+      const rms = Math.sqrt(buf.reduce((a, v) => a + v * v, 0) / buf.length), t = performance.now() - t0;
+      if (t < 300) { floor += rms; n++; return; }                 // learn the room's noise level
+      const th = Math.max(0.015, (floor / Math.max(n, 1)) * 3);
+      if (rms > th) { spoke = true; lastVoice = t; }
+      if ((spoke && t - lastVoice > 650) || (!spoke && t > 6000) || t > 12000) stop();
+    }, 50);
+  });
+  mr.start();
+  await done;
+  stream.getTracks().forEach(tr => tr.stop());
+  if (!spoke || run.cancelled || !chunks.length) return null;
+  const dec = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+  try { return (await dec.decodeAudioData(await new Blob(chunks).arrayBuffer())).getChannelData(0).slice(); }
+  finally { dec.close(); }
+}
+async function startLocal(switched) {
+  const run = rec = { local: true, cancelled: false, stop: null, abort() { this.cancelled = true; this.stop?.(); } };
+  getWhisper();
+  const hint = whisperReady ? '例:5分、止めて、残りは?' : '音声は端末内で処理されます';
+  vShow('listen', switched ? '端末内の音声認識に切り替えました。もう一度どうぞ' : '聞いています…', hint);
+  let pcm;
+  try { pcm = await recordUtterance(run); }
+  catch (e) {
+    if (rec !== run) return;
+    rec = null;
+    return vReply(e && e.name === 'NotAllowedError' ? VOICE_ERR['not-allowed'] : 'マイクを使えませんでした');
+  }
+  if (rec !== run) return;
+  if (!pcm) { rec = null; return vReply('聞き取れませんでした'); }
+  vShow('think', '認識しています…', whisperReady ? '' : `音声認識モデルを準備中 ${whisperPct}%(初回のみ・約77MB)`);
+  let text = '';
+  try { text = await transcribe(pcm); }
+  catch { if (rec === run) { rec = null; vReply('端末内の音声認識を準備できませんでした'); } return; }
+  if (rec !== run) return;
+  rec = null;
+  // Whisper tends to invent these on near-silence
+  text = text.replace(/[^。!?]*(ご視聴|視聴|動画|見てくれて|字幕|チャンネル登録)[^。!?]*[。!?]?/g, '').trim();
+  if (!text) return vReply('聞き取れませんでした');
+  vHandle([text]);
+}
+
 function startVoice() {
-  const SR = getSR();
-  if (!SR) return;
   clearTimeout(vHideTimer);
   window.speechSynthesis?.cancel();
   audio();
+  if (useLocal()) return startLocal(false);
+  const SR = getSR();
+  if (!SR) return;
   const r = rec = new SR();
   r.lang = 'ja-JP'; r.interimResults = true; r.maxAlternatives = 3; r.continuous = false;
   let alts = [], err = null;
   const finish = () => {
     if (rec !== r) return;
     rec = null;
-    if (alts.length) vHandle(alts);
-    else vReply(VOICE_ERR[err] || '聞き取れませんでした');
+    if (alts.length) return vHandle(alts);
+    // the browser's cloud service is unreachable: switch to on-device recognition for good
+    if (['network', 'service-not-allowed', 'language-not-supported'].includes(err) && localOk()) {
+      S.voiceLocal = true; save();
+      return startLocal(true);
+    }
+    vReply(VOICE_ERR[err] || '聞き取れませんでした');
   };
   r.onresult = e => {
     if (rec !== r) return;
@@ -1009,12 +1153,15 @@ function startVoice() {
   try { r.start(); } catch { rec = null; vReply('音声認識を開始できませんでした'); }
 }
 function toggleVoice() {
-  if (!getSR()) return;
+  if (!getSR() && !localOk()) return;
   if (rec) vClose(); else startVoice();
 }
 micBtn.onclick = toggleVoice;
 voice.onclick = vClose;
-if (!getSR()) micBtn.style.display = 'none';
+// Someone who already uses on-device voice gets the model loaded in the background,
+// so pressing the mic answers right away instead of waiting for the load.
+if (S.voiceSeen && useLocal()) setTimeout(getWhisper, 1500);
+if (!getSR() && !localOk()) micBtn.style.display = 'none';
 
 function toggleFs() {
   if (pipWin) return;

@@ -1,0 +1,5 @@
+# Cross-origin isolation lets the on-device speech model use several CPU threads.
+# "credentialless" keeps Google Fonts and the CDN working without extra headers.
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: credentialless
