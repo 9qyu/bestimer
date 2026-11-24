@@ -960,18 +960,10 @@ function vClose() {
   clearTimeout(vHideTimer);
   const r = rec; rec = null;
   if (r) try { r.abort(); } catch {}
-  window.speechSynthesis?.cancel();
   voice.hidden = true; micBtn.classList.remove('on');
 }
 function vReply(text, hint = '') {
   vShow('reply', text, hint);
-  const synth = window.speechSynthesis;
-  if (synth && window.SpeechSynthesisUtterance) {
-    synth.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = 'ja-JP'; u.rate = 1.05;
-    synth.speak(u);
-  }
   vHideTimer = setTimeout(vClose, Math.max(3000, text.length * 190 + 1600));
 }
 function vHandle(alts) {
@@ -1118,7 +1110,6 @@ async function startLocal(switched) {
 
 function startVoice() {
   clearTimeout(vHideTimer);
-  window.speechSynthesis?.cancel();
   audio();
   if (useLocal()) return startLocal(false);
   const SR = getSR();
